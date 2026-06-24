@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SugarCare - Health Monitor & Tracker
 
-## Getting Started
+SugarCare is a premium, modern, and mobile-responsive health tracking web application designed to help users securely log, monitor, and analyze their blood sugar and blood pressure readings.
 
-First, run the development server:
+---
 
+## 🚀 Key Features
+
+* **Authentication**: Seamless email signup, login, and Google OAuth via Supabase Authentication (or simulated in local Demo mode).
+* **Dual-Mode Adapter**: Runs instantly in **Demo Mode** using `localStorage` with rich pre-populated mock data if database credentials are not configured. Swaps automatically to **Production Mode** when environment variables are supplied.
+* **Dashboard Summary**: Real-time stats showing latest readings, entry counters, and automated 7-day and 30-day health average insights.
+* **Vitals Logs (CRUD)**: Log, edit, or delete sugar levels and blood pressure entries with range validation and inline confirmations.
+* **Healthy Celebration**: Dynamic confetti feedback when vitals are logged in healthy medical ranges.
+* **Advanced History Tables**: Interactive history grids with sorting, pagination, date-range filtering, and text search.
+* **Health Analytics**: Interactive, responsive charts powered by Recharts showing trends across 7, 30, and 90-day intervals.
+* **Export Reports**: Generate and download professional medical reports in CSV format or print-ready PDF format (via jsPDF) featuring summary stats and structured history grids.
+* **PWA & Installable**: Fully configure web manifests and service worker loaders, showing floating install banners on compatible mobile devices and tablets.
+* **Dark Mode**: Complete system preference detection and manual toggle support.
+
+---
+
+## 🛠️ Tech Stack
+
+* **Frontend**: Next.js 15 (App Router), TypeScript, TailwindCSS v4, shadcn/ui.
+* **Charts**: Recharts.
+* **PDF Engine**: jsPDF & jspdf-autotable.
+* **Animation**: canvas-confetti.
+* **Backend & Database**: Supabase & PostgreSQL.
+
+---
+
+## 💻 Local Setup Guide
+
+### 1. Install Dependencies
+Clone/navigate to the folder and run:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Start the Development Server
+Run the local dev engine:
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser to view the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+*By default, if no Supabase environment variables are present, the app will run in **Demo Mode** using local storage and seeded mock data. You can log, edit, delete, view charts, and export CSV/PDF reports immediately.*
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## 🗄️ Supabase Configuration (Optional - For Production Mode)
 
-To learn more about Next.js, take a look at the following resources:
+To connect the application to a live PostgreSQL database and enable user authentication:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 1. Create a Supabase Project
+Go to [Supabase](https://supabase.com) and create a new project.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Execute SQL Database Migrations
+Open the **SQL Editor** in the Supabase Dashboard, create a new query, paste the contents of `supabase/migration.sql` from this repository, and click **Run**. This will create the `profiles`, `sugar_readings`, and `bp_readings` tables, configure row-level security (RLS), and register the database triggers.
 
-## Deploy on Vercel
+### 3. Add Environment Variables
+Create a `.env.local` file in the root of the project and add your Supabase credentials:
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+When you restart the development server, SugarCare will automatically detect these credentials, connect to your database, and switch from "Demo Mode" to live Supabase Auth and Database operations.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 📱 PWA / Mobile Installation
+
+1. Deploy the app (e.g., to Vercel or run locally on your network).
+2. Open the page on a mobile device (iOS/Safari or Android/Chrome).
+3. **Android**: A floating banner will prompt you to install. Tap "Install".
+4. **iOS**: Tap the "Share" button, scroll down, and tap **Add to Home Screen**.
