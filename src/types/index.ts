@@ -3,6 +3,10 @@ export interface Profile {
   email: string;
   full_name: string | null;
   created_at: string;
+  age?: number | null;
+  has_diabetes: boolean;
+  has_high_bp: boolean;
+  has_low_bp: boolean;
 }
 
 export type SugarReadingType = 'Fasting' | 'Before Meal' | 'After Meal' | 'Random';
@@ -23,6 +27,15 @@ export interface BPReading {
   systolic: number; // 50-250
   diastolic: number; // 30-150
   pulse: number;
+  notes: string | null;
+  reading_time: string; // ISO date-time string
+  created_at: string;
+}
+
+export interface WeightReading {
+  id: string;
+  user_id: string;
+  weight_value: number; // between 10 and 500
   notes: string | null;
   reading_time: string; // ISO date-time string
   created_at: string;

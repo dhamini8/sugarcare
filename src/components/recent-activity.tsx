@@ -1,24 +1,41 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Droplet, Activity, Calendar, FileText } from 'lucide-react';
-import { SugarReading, BPReading } from '@/types';
+import { Droplet, Activity, Calendar, FileText, Scale } from 'lucide-react';
+import { SugarReading, BPReading, WeightReading, Profile } from '@/types';
+import { checkSugarControlled, checkBPControlled } from '@/lib/vitals';
 
 interface RecentActivityProps {
   sugarReadings: SugarReading[];
   bpReadings: BPReading[];
+  weightReadings: WeightReading[];
+  profile: Profile | null;
 }
 
 type ActivityItem = 
   | { itemType: 'sugar'; date: Date; raw: SugarReading }
-  | { itemType: 'bp'; date: Date; raw: BPReading };
+  | { itemType: 'bp'; date: Date; raw: BPReading }
+  | { itemType: 'weight'; date: Date; raw: WeightReading };
 
-export function RecentActivity({ sugarReadings, bpReadings }: RecentActivityProps) {
+export function RecentActivity({ sugarReadings, bpReadings, weightReadings = [], profile }: RecentActivityProps) {
+  const [displayUnit, setDisplayUnit] = useState<'kg' | 'lbs'>('kg');
+
+  // Load saved unit preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedUnit = localStorage.getItem('sugarcare_weight_unit');
+      if (savedUnit === 'kg' || savedUnit === 'lbs') {
+        setDisplayUnit(savedUnit);
+      }
+    }
+  }, [weightReadings]);
+
   // Combine and sort the latest entries
   const activities: ActivityItem[] = [
     ...sugarReadings.map(r => ({ itemType: 'sugar' as const, date: new Date(r.reading_time), raw: r })),
-    ...bpReadings.map(r => ({ itemType: 'bp' as const, date: new Date(r.reading_time), raw: r }))
+    ...bpReadings.map(r => ({ itemType: 'bp' as const, date: new Date(r.reading_time), raw: r })),
+    ...weightReadings.map(r => ({ itemType: 'weight' as const, date: new Date(r.reading_time), raw: r }))
   ]
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .slice(0, 10); // get latest 10
@@ -35,6 +52,14 @@ export function RecentActivity({ sugarReadings, bpReadings }: RecentActivityProp
     return 'text-emerald-500';
   };
 
+  const formatWeight = (kgValue: number) => {
+    if (displayUnit === 'lbs') {
+      const lbsValue = Math.round(kgValue * 2.20462 * 10) / 10;
+      return `${lbsValue} lbs`;
+    }
+    return `${kgValue} kg`;
+  };
+
   return (
     <Card className="rounded-2xl border border-border bg-card shadow-sm">
       <CardHeader className="p-4 border-b border-border">
@@ -46,7 +71,6 @@ export function RecentActivity({ sugarReadings, bpReadings }: RecentActivityProp
         {activities.length > 0 ? (
           <div className="divide-y divide-border">
             {activities.map((item, idx) => {
-              const isSugar = item.itemType === 'sugar';
               const formattedDate = item.date.toLocaleDateString(undefined, { 
                 month: 'short', 
                 day: 'numeric', 
@@ -54,44 +78,105 @@ export function RecentActivity({ sugarReadings, bpReadings }: RecentActivityProp
                 minute: '2-digit' 
               });
 
-              return (
-                <div key={idx} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl ${isSugar ? 'bg-blue-500/10 text-blue-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
-                      {isSugar ? <Droplet className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">
-                        {isSugar 
-                          ? `Blood Sugar: ${item.raw.reading_type}` 
-                          : 'Blood Pressure Log'
-                        }
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">{formattedDate}</p>
-                      {item.raw.notes && (
-                        <p className="text-[10px] text-muted-foreground italic mt-0.5 max-w-xs md:max-w-md truncate">
-                          "{item.raw.notes}"
+              if (item.itemType === 'sugar') {
+                const raw = item.raw as SugarReading;
+                const isControlled = checkSugarControlled(raw.sugar_value, raw.reading_type, profile);
+                return (
+                  <div key={idx} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                        <Droplet className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">
+                          Blood Sugar: {raw.reading_type}
                         </p>
-                      )}
+                        <p className="text-[10px] text-muted-foreground">{formattedDate}</p>
+                        {raw.notes && (
+                          <p className="text-[10px] text-muted-foreground italic mt-0.5 max-w-xs md:max-w-md truncate">
+                            "{raw.notes}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right flex flex-col items-end gap-1.5">
+                      <p className={`text-sm font-bold ${getSugarColor(raw.sugar_value)}`}>
+                        {raw.sugar_value} mg/dL
+                      </p>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                        isControlled 
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                          : 'bg-destructive/10 text-destructive'
+                      }`}>
+                        {isControlled ? 'Controlled' : 'Not Controlled'}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-bold ${
-                      isSugar 
-                        ? getSugarColor((item.raw as SugarReading).sugar_value) 
-                        : getBPColor((item.raw as BPReading).systolic, (item.raw as BPReading).diastolic)
-                    }`}>
-                      {isSugar 
-                        ? `${(item.raw as SugarReading).sugar_value} mg/dL` 
-                        : `${(item.raw as BPReading).systolic}/${(item.raw as BPReading).diastolic} mmHg`
-                      }
-                    </p>
-                    {!isSugar && (
-                      <p className="text-[9px] text-muted-foreground font-medium">Pulse: {(item.raw as BPReading).pulse} bpm</p>
-                    )}
+                );
+              } else if (item.itemType === 'bp') {
+                const raw = item.raw as BPReading;
+                const isControlled = checkBPControlled(raw.systolic, raw.diastolic, profile);
+                return (
+                  <div key={idx} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+                        <Activity className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-foreground flex items-center">
+                          Blood Pressure Log
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">{formattedDate}</p>
+                        {raw.notes && (
+                          <p className="text-[10px] text-muted-foreground italic mt-0.5 max-w-xs md:max-w-md truncate">
+                            "{raw.notes}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right flex flex-col items-end gap-0.5">
+                      <p className={`text-sm font-bold ${getBPColor(raw.systolic, raw.diastolic)}`}>
+                        {raw.systolic}/{raw.diastolic} mmHg
+                      </p>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold mt-0.5 ${
+                        isControlled 
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                          : 'bg-destructive/10 text-destructive'
+                      }`}>
+                        {isControlled ? 'Controlled' : 'Not Controlled'}
+                      </span>
+                      <p className="text-[9px] text-muted-foreground font-medium mt-0.5">Pulse: {raw.pulse} bpm</p>
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              } else {
+                const raw = item.raw as WeightReading;
+                return (
+                  <div key={idx} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                        <Scale className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-foreground flex items-center">
+                          Weight Log
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">{formattedDate}</p>
+                        {raw.notes && (
+                          <p className="text-[10px] text-muted-foreground italic mt-0.5 max-w-xs md:max-w-md truncate">
+                            "{raw.notes}"
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">
+                        {formatWeight(raw.weight_value)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
             })}
           </div>
         ) : (

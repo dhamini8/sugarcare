@@ -21,7 +21,7 @@ import {
   ArrowUpDown,
   Calendar
 } from 'lucide-react';
-import { BPReading } from '@/types';
+import { BPReading, Profile } from '@/types';
 import { 
   Dialog,
   DialogContent,
@@ -31,14 +31,16 @@ import {
   DialogTitle
 } from './ui/dialog';
 import { db } from '@/lib/db';
+import { checkBPControlled } from '@/lib/vitals';
 
 interface BPHistoryProps {
   readings: BPReading[];
   onRefresh: () => void;
   onEdit: (reading: BPReading) => void;
+  profile: Profile | null;
 }
 
-export function BPHistory({ readings, onRefresh, onEdit }: BPHistoryProps) {
+export function BPHistory({ readings, onRefresh, onEdit, profile }: BPHistoryProps) {
   // Filters state
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -249,9 +251,18 @@ export function BPHistory({ readings, onRefresh, onEdit }: BPHistoryProps) {
                       </TableCell>
                       <TableCell className="text-xs">{reading.pulse} <span className="text-[10px] text-muted-foreground">bpm</span></TableCell>
                       <TableCell>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${getBPStatusColor(reading.systolic, reading.diastolic)}`}>
-                          {getBPStatusText(reading.systolic, reading.diastolic)}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${getBPStatusColor(reading.systolic, reading.diastolic)}`}>
+                            {getBPStatusText(reading.systolic, reading.diastolic)}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                            checkBPControlled(reading.systolic, reading.diastolic, profile)
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-destructive/10 text-destructive'
+                          }`}>
+                            {checkBPControlled(reading.systolic, reading.diastolic, profile) ? 'Controlled' : 'Not Controlled'}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground truncate max-w-[150px] md:max-w-xs">
                         {reading.notes || '-'}

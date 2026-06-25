@@ -8,15 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { 
   FileText, 
-  Download, 
-  Table as TableIcon, 
   Calendar, 
   Activity, 
   CheckCircle,
-  FileSpreadsheet
+  Scale
 } from 'lucide-react';
 import { db } from '@/lib/db';
-import { SugarReading, BPReading, Profile } from '@/types';
+import { SugarReading, BPReading, WeightReading, Profile } from '@/types';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -25,13 +23,13 @@ export default function ReportsPage() {
   const [user, setUser] = useState<Profile | null>(null);
   const [sugarReadings, setSugarReadings] = useState<SugarReading[]>([]);
   const [bpReadings, setBPReadings] = useState<BPReading[]>([]);
+  const [weightReadings, setWeightReadings] = useState<WeightReading[]>([]);
 
   // Filter ranges
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   // Export progress states
-  const [isExportingCSV, setIsExportingCSV] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   useEffect(() => {
@@ -40,10 +38,12 @@ export default function ReportsPage() {
         const u = await db.getCurrentUser();
         const sugar = await db.getSugarReadings();
         const bp = await db.getBPReadings();
+        const weight = await db.getWeightReadings();
         
         setUser(u);
         setSugarReadings(sugar);
         setBPReadings(bp);
+        setWeightReadings(weight);
 
         // Default range: last 30 days
         const end = new Date();
@@ -83,28 +83,28 @@ export default function ReportsPage() {
       return true;
     });
 
-    return { sugar: filteredSugar, bp: filteredBP };
-  }, [sugarReadings, bpReadings, startDate, endDate]);
+    const filteredWeight = weightReadings.filter(r => {
+      const time = new Date(r.reading_time);
+      if (start && time < start) return false;
+      if (end && time > end) return false;
+      return true;
+    });
 
-  // Helper: Trigger file download in browser
-  const downloadFile = (content: string, filename: string, contentType: string) => {
-    const blob = new Blob([content], { type: contentType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+    return { sugar: filteredSugar, bp: filteredBP, weight: filteredWeight };
+  }, [sugarReadings, bpReadings, weightReadings, startDate, endDate]);
 
   // PDF EXPORT LOGIC
-  const handleExportPDF = (type: 'sugar' | 'bp' | 'complete') => {
+  const handleExportPDF = (type: 'sugar' | 'bp' | 'weight' | 'complete') => {
     setIsExportingPDF(true);
     try {
-      const { sugar, bp } = filteredData;
+      const { sugar, bp, weight } = filteredData;
       const doc = new jsPDF();
       const patientName = user?.full_name || user?.email || 'Valued Patient';
       const patientEmail = user?.email || '';
+
+      const savedUnit = typeof window !== 'undefined'
+        ? localStorage.getItem('sugarcare_weight_unit') || 'kg'
+        : 'kg';
 
       // Set Font and Header
       doc.setFont('Helvetica', 'normal');
@@ -114,6 +114,7 @@ export default function ReportsPage() {
       let title = 'SugarCare Complete Health Report';
       if (type === 'sugar') title = 'SugarCare Blood Glucose Report';
       if (type === 'bp') title = 'SugarCare Blood Pressure Report';
+      if (type === 'weight') title = 'SugarCare Body Weight Report';
       
       doc.text(title, 14, 20);
 
@@ -135,7 +136,8 @@ export default function ReportsPage() {
       let countText = '';
       if (type === 'sugar') countText = `Total Entries: ${sugar.length} glucose logs`;
       else if (type === 'bp') countText = `Total Entries: ${bp.length} blood pressure logs`;
-      else countText = `Total Entries: ${sugar.length} glucose, ${bp.length} blood pressure logs`;
+      else if (type === 'weight') countText = `Total Entries: ${weight.length} weight logs`;
+      else countText = `Total Entries: ${sugar.length} glucose, ${bp.length} BP, ${weight.length} weight logs`;
       
       doc.text(countText, 18, 55);
 
@@ -153,6 +155,13 @@ export default function ReportsPage() {
       const avgPulse = bp.length > 0 
         ? Math.round(bp.reduce((a, b) => a + b.pulse, 0) / bp.length) 
         : null;
+
+      const avgWeightRaw = weight.length > 0
+        ? weight.reduce((a, b) => a + Number(b.weight_value), 0) / weight.length
+        : null;
+      const avgWeight = avgWeightRaw
+        ? Math.round((savedUnit === 'lbs' ? avgWeightRaw * 2.20462 : avgWeightRaw) * 10) / 10
+        : 'N/A';
 
       // Render summary indicators
       doc.setFontSize(12);
@@ -177,6 +186,13 @@ export default function ReportsPage() {
           'Heart Rate (Pulse)', 
           avgPulse ? `${avgPulse} bpm` : 'No data',
           avgPulse ? (avgPulse >= 60 && avgPulse <= 100 ? 'Normal resting heart rate' : 'Outside typical range') : 'Log pulse records regularly'
+        ]);
+      }
+      if (type === 'weight' || type === 'complete') {
+        summaryRows.push([
+          'Body Weight',
+          avgWeight !== 'N/A' ? `${avgWeight} ${savedUnit}` : 'No data',
+          avgWeight !== 'N/A' ? 'Weight logging active' : 'Log weight entries regularly'
         ]);
       }
 
@@ -222,7 +238,7 @@ export default function ReportsPage() {
         currentY = (doc as any).lastAutoTable.finalY + 12;
       }
 
-      // Check if we need to add a page for BP readings
+      // BP Records Section
       if (type === 'bp' || type === 'complete') {
         if (currentY > 240) {
           doc.addPage();
@@ -249,6 +265,41 @@ export default function ReportsPage() {
           body: bpRows.length > 0 ? bpRows : [['No data', 'No data', 'No data', 'No data']],
           theme: 'striped',
           headStyles: { fillColor: [16, 185, 129] } // emerald green
+        });
+
+        currentY = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // Weight Records Section
+      if (type === 'weight' || type === 'complete') {
+        if (currentY > 240) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFontSize(12);
+        doc.setFont('Helvetica', 'bold');
+        doc.text('Detailed Body Weight Log', 14, currentY);
+
+        const weightRows = weight.map(r => {
+          const d = new Date(r.reading_time);
+          const wValRaw = Number(r.weight_value);
+          const wVal = savedUnit === 'lbs'
+            ? Math.round(wValRaw * 2.20462 * 10) / 10
+            : wValRaw;
+          return [
+            `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+            `${wVal} ${savedUnit}`,
+            r.notes || '-'
+          ];
+        });
+
+        autoTable(doc, {
+          startY: currentY + 4,
+          head: [['Date & Time', 'Weight', 'Patient Notes']],
+          body: weightRows.length > 0 ? weightRows : [['No data', 'No data', 'No data']],
+          theme: 'striped',
+          headStyles: { fillColor: [6, 182, 212] } // cyan
         });
       }
 
@@ -344,7 +395,7 @@ export default function ReportsPage() {
                   Download separate PDF documents focusing on individual vital signs.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Button 
                   onClick={() => handleExportPDF('sugar')} 
                   variant="outline" 
@@ -360,7 +411,16 @@ export default function ReportsPage() {
                   className="rounded-xl border border-border hover:bg-muted py-5 text-xs font-semibold"
                   disabled={isExportingPDF}
                 >
-                  <FileText className="mr-2 h-4 w-4 text-emerald-500" /> BP & Pulse Report (PDF)
+                  <FileText className="mr-2 h-4 w-4 text-emerald-500" /> BP & Pulse (PDF)
+                </Button>
+
+                <Button 
+                  onClick={() => handleExportPDF('weight')} 
+                  variant="outline" 
+                  className="rounded-xl border border-border hover:bg-muted py-5 text-xs font-semibold"
+                  disabled={isExportingPDF}
+                >
+                  <Scale className="mr-2 h-4 w-4 text-cyan-500" /> Weight Report (PDF)
                 </Button>
               </CardContent>
             </Card>
@@ -377,7 +437,7 @@ export default function ReportsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  This document merges both blood sugar and blood pressure records in clear tables. It includes patient details, average summary stats, and clinical notes.
+                  This document merges blood sugar, blood pressure, and weight records in clear tables. It includes patient details, average summary stats, and clinical notes.
                 </p>
 
                 <Button 

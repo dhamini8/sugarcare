@@ -8,6 +8,10 @@ SugarCare is a premium, modern, and mobile-responsive health tracking web applic
 
 * **Authentication**: Seamless email signup, login, and Google OAuth via Supabase Authentication (or simulated in local Demo mode).
 * **Dual-Mode Adapter**: Runs instantly in **Demo Mode** using `localStorage` with rich pre-populated mock data if database credentials are not configured. Swaps automatically to **Production Mode** when environment variables are supplied.
+* **Personal Health Profile**: Record and manage your **Age** and pre-existing medical conditions (**Diabetes, High Blood Pressure, Low Blood Pressure**) directly during registration or in the dedicated **User Profile** console.
+* **Adaptive Vital Thresholds**: Automatically recalibrates blood sugar and blood pressure "controlled vs. uncontrolled" ranges and alert thresholds based on your pre-existing health profile.
+* **Resilient Database Fallback**: A robust fallback system that gracefully detects if the Supabase database schema lacks the new columns, saving settings to local browser overrides so settings work flawlessly without database errors.
+* **Clean Sidebar Navigation**: Streamlined desktop navigation featuring a clean sidebar layout where "Log Out" and "Delete Account" are housed neatly in a popover menu on the bottom-left profile card.
 * **Dashboard Summary**: Real-time stats showing latest readings, entry counters, and automated 7-day and 30-day health average insights.
 * **Vitals Logs (CRUD)**: Log, edit, or delete sugar levels and blood pressure entries with range validation and inline confirmations.
 * **Healthy Celebration**: Dynamic confetti feedback when vitals are logged in healthy medical ranges.
@@ -56,7 +60,7 @@ To connect the application to a live PostgreSQL database and enable user authent
 Go to [Supabase](https://supabase.com) and create a new project.
 
 ### 2. Execute SQL Database Migrations
-Open the **SQL Editor** in the Supabase Dashboard, create a new query, paste the contents of `supabase/migration.sql` from this repository, and click **Run**. This will create the `profiles`, `sugar_readings`, and `bp_readings` tables, configure row-level security (RLS), and register the database triggers.
+Open the **SQL Editor** in the Supabase Dashboard, create a new query, paste the contents of `supabase/migration.sql` from this repository, and click **Run**. This will create the `profiles`, `sugar_readings`, `bp_readings`, and `weight_readings` tables, configure row-level security (RLS), register triggers for profile syncing, and add columns for age and medical histories.
 
 ### 3. Add Environment Variables
 Create a `.env.local` file in the root of the project and add your Supabase credentials:

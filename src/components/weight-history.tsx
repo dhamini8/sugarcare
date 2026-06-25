@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Table, 
   TableBody, 
@@ -13,13 +13,6 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from './ui/select';
-import { 
   Edit2, 
   Trash2, 
   Search, 
@@ -27,9 +20,9 @@ import {
   ChevronRight, 
   ArrowUpDown,
   Calendar,
-  Filter
+  Scale
 } from 'lucide-react';
-import { SugarReading, SugarReadingType, Profile } from '@/types';
+import { WeightReading } from '@/types';
 import { 
   Dialog,
   DialogContent,
@@ -39,24 +32,40 @@ import {
   DialogTitle
 } from './ui/dialog';
 import { db } from '@/lib/db';
-import { checkSugarControlled } from '@/lib/vitals';
 
-interface SugarHistoryProps {
-  readings: SugarReading[];
+interface WeightHistoryProps {
+  readings: WeightReading[];
   onRefresh: () => void;
-  onEdit: (reading: SugarReading) => void;
-  profile: Profile | null;
+  onEdit: (reading: WeightReading) => void;
 }
 
-export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHistoryProps) {
+export function WeightHistory({ readings, onRefresh, onEdit }: WeightHistoryProps) {
+  const [displayUnit, setDisplayUnit] = useState<'kg' | 'lbs'>('kg');
+
+  // Load saved unit preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedUnit = localStorage.getItem('sugarcare_weight_unit');
+      if (savedUnit === 'kg' || savedUnit === 'lbs') {
+        setDisplayUnit(savedUnit);
+      }
+    }
+  }, []);
+
+  const handleUnitToggle = (unit: 'kg' | 'lbs') => {
+    setDisplayUnit(unit);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sugarcare_weight_unit', unit);
+    }
+  };
+
   // Filters state
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
   // Sorting state
-  const [sortField, setSortField] = useState<'time' | 'value'>('time');
+  const [sortField, setSortField] = useState<'time' | 'weight'>('time');
   const [sortAsc, setSortAsc] = useState(false);
 
   // Pagination state
@@ -76,13 +85,8 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
       const q = search.toLowerCase();
       result = result.filter(r => 
         (r.notes && r.notes.toLowerCase().includes(q)) || 
-        r.sugar_value.toString().includes(q)
+        r.weight_value.toString().includes(q)
       );
-    }
-
-    // Filter by type
-    if (typeFilter !== 'all') {
-      result = result.filter(r => r.reading_type === typeFilter);
     }
 
     // Filter by date range
@@ -99,8 +103,8 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
 
     // Sorting
     result.sort((a, b) => {
-      if (sortField === 'value') {
-        return sortAsc ? a.sugar_value - b.sugar_value : b.sugar_value - a.sugar_value;
+      if (sortField === 'weight') {
+        return sortAsc ? a.weight_value - b.weight_value : b.weight_value - a.weight_value;
       } else {
         const timeA = new Date(a.reading_time).getTime();
         const timeB = new Date(b.reading_time).getTime();
@@ -109,7 +113,7 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
     });
 
     return result;
-  }, [readings, search, typeFilter, startDate, endDate, sortField, sortAsc]);
+  }, [readings, search, startDate, endDate, sortField, sortAsc]);
 
   // Paginated readings
   const paginatedReadings = useMemo(() => {
@@ -119,14 +123,13 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
 
   const totalPages = Math.max(1, Math.ceil(filteredReadings.length / pageSize));
 
-  // Handle pagination changes
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setPage(newPage);
     }
   };
 
-  const handleSort = (field: 'time' | 'value') => {
+  const handleSort = (field: 'time' | 'weight') => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
     } else {
@@ -144,7 +147,7 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
     if (!deleteId) return;
     setIsDeleting(true);
     try {
-      await db.deleteSugarReading(deleteId);
+      await db.deleteWeightReading(deleteId);
       onRefresh();
       setDeleteId(null);
     } catch (e) {
@@ -156,41 +159,46 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
 
   const clearFilters = () => {
     setSearch('');
-    setTypeFilter('all');
     setStartDate('');
     setEndDate('');
     setPage(1);
   };
 
-  const getSugarStatusText = (val: number, type: SugarReadingType) => {
-    if (val < 70) return 'Low';
-    if (type === 'Fasting') {
-      if (val < 100) return 'Normal';
-      if (val <= 125) return 'Elevated';
-      return 'High';
-    } else {
-      if (val < 140) return 'Normal';
-      if (val < 200) return 'Elevated';
-      return 'High';
+  const formatWeight = (kgValue: number) => {
+    if (displayUnit === 'lbs') {
+      const lbsValue = Math.round(kgValue * 2.20462 * 10) / 10;
+      return `${lbsValue} lbs`;
     }
-  };
-
-  const getSugarStatusColor = (val: number, type: SugarReadingType) => {
-    const status = getSugarStatusText(val, type);
-    if (status === 'Low') return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
-    if (status === 'Normal') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
-    if (status === 'Elevated') return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400';
-    return 'bg-destructive/10 text-destructive';
+    return `${kgValue} kg`;
   };
 
   return (
     <Card className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
       <CardHeader className="p-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <CardTitle className="text-base font-bold text-primary flex items-center gap-2">
-          Blood Sugar History Logs
+          Weight History Logs
         </CardTitle>
-        <div className="flex flex-wrap gap-2">
-          {(search || typeFilter !== 'all' || startDate || endDate) && (
+        <div className="flex items-center gap-4">
+          <div className="flex bg-muted p-0.5 rounded-lg border border-border">
+            <Button
+              variant={displayUnit === 'kg' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => handleUnitToggle('kg')}
+              className="px-2.5 py-1 text-[10px] font-bold h-7 rounded-md"
+            >
+              kg
+            </Button>
+            <Button
+              variant={displayUnit === 'lbs' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => handleUnitToggle('lbs')}
+              className="px-2.5 py-1 text-[10px] font-bold h-7 rounded-md"
+            >
+              lbs
+            </Button>
+          </div>
+
+          {(search || startDate || endDate) && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs h-9 rounded-xl">
               Clear Filters
             </Button>
@@ -199,7 +207,7 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
       </CardHeader>
       <CardContent className="p-6 space-y-4">
         {/* FILTERING CONTROLS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -210,22 +218,7 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
             />
           </div>
 
-          <div>
-            <Select value={typeFilter} onValueChange={(val) => { if (val) { setTypeFilter(val); setPage(1); } }}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Reading Type" />
-              </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Fasting">Fasting</SelectItem>
-                <SelectItem value="Before Meal">Before Meal</SelectItem>
-                <SelectItem value="After Meal">After Meal</SelectItem>
-                <SelectItem value="Random">Random</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:col-span-2">
             <Input
               type="date"
               value={startDate}
@@ -255,12 +248,10 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
                   </Button>
                 </TableHead>
                 <TableHead>
-                  <Button variant="ghost" onClick={() => handleSort('value')} className="flex items-center gap-1 hover:bg-transparent p-0 text-xs font-semibold">
-                    Sugar Level <ArrowUpDown className="h-3 w-3" />
+                  <Button variant="ghost" onClick={() => handleSort('weight')} className="flex items-center gap-1 hover:bg-transparent p-0 text-xs font-semibold">
+                    Weight <ArrowUpDown className="h-3 w-3" />
                   </Button>
                 </TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Status</TableHead>
                 <TableHead className="max-w-[150px] md:max-w-xs">Notes</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -279,22 +270,7 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
                         <div className="text-[10px] text-muted-foreground">{formattedTime}</div>
                       </TableCell>
                       <TableCell className="font-bold text-sm">
-                        {reading.sugar_value} <span className="text-[10px] font-normal text-muted-foreground">mg/dL</span>
-                      </TableCell>
-                      <TableCell className="text-xs">{reading.reading_type}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${getSugarStatusColor(reading.sugar_value, reading.reading_type)}`}>
-                            {getSugarStatusText(reading.sugar_value, reading.reading_type)}
-                          </span>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
-                            checkSugarControlled(reading.sugar_value, reading.reading_type, profile)
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-destructive/10 text-destructive'
-                          }`}>
-                            {checkSugarControlled(reading.sugar_value, reading.reading_type, profile) ? 'Controlled' : 'Not Controlled'}
-                          </span>
-                        </div>
+                        {formatWeight(reading.weight_value)}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground truncate max-w-[150px] md:max-w-xs">
                         {reading.notes || '-'}
@@ -314,7 +290,7 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-xs text-muted-foreground font-medium">
+                  <TableCell colSpan={4} className="text-center py-8 text-xs text-muted-foreground font-medium">
                     No matching logs found.
                   </TableCell>
                 </TableRow>
@@ -355,7 +331,7 @@ export function SugarHistory({ readings, onRefresh, onEdit, profile }: SugarHist
         <Dialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
           <DialogContent className="sm:max-w-[400px] rounded-2xl">
             <DialogHeader>
-              <DialogTitle className="text-lg font-bold text-destructive">Delete Glucose Log?</DialogTitle>
+              <DialogTitle className="text-lg font-bold text-destructive">Delete Weight Log?</DialogTitle>
               <DialogDescription>
                 This action is permanent and cannot be undone. This reading will be removed from your health history records.
               </DialogDescription>

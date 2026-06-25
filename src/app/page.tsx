@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Activity, Droplet, CheckCircle, Shield, Moon, Sun } from 'lucide-react';
+import { Activity, Droplet, CheckCircle, Shield } from 'lucide-react';
 import { db } from '@/lib/db';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
@@ -21,6 +21,12 @@ export default function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // New profile state
+  const [age, setAge] = useState<string>('');
+  const [hasDiabetes, setHasDiabetes] = useState(false);
+  const [hasHighBP, setHasHighBP] = useState(false);
+  const [hasLowBP, setHasLowBP] = useState(false);
 
   // Connection config checking
   const [isCheckingSession, setIsCheckingSession] = useState(true);
@@ -64,8 +70,15 @@ export default function AuthPage() {
     setSuccess(null);
     setIsLoading(true);
 
+    const parsedAge = age ? parseInt(age, 10) : null;
+    if (parsedAge !== null && (isNaN(parsedAge) || parsedAge < 0 || parsedAge > 120)) {
+      setError('Please enter a valid age between 0 and 120.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      await db.signUp(email, password, fullName);
+      await db.signUp(email, password, fullName, parsedAge, hasDiabetes, hasHighBP, hasLowBP);
       if (isSupabaseConfigured) {
         setSuccess('Registration successful! Please check your email inbox to verify your account.');
       } else {
@@ -239,6 +252,19 @@ export default function AuthPage() {
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="reg-age">Age (Optional)</Label>
+                    <Input
+                      id="reg-age"
+                      type="number"
+                      placeholder="e.g. 35"
+                      min="0"
+                      max="120"
+                      value={age}
+                      onChange={(e) => setAge(e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
                     <Label htmlFor="reg-password">Password</Label>
                     <Input
                       id="reg-password"
@@ -250,7 +276,46 @@ export default function AuthPage() {
                       required
                     />
                   </div>
-                  <Button type="submit" disabled={isLoading} className="w-full rounded-xl py-3 mt-2 shadow-sm font-semibold">
+                  
+                  {/* MEDICAL PROFILE SECTION */}
+                  <div className="space-y-2 pt-2 border-t border-border mt-3">
+                    <p className="text-xs font-semibold text-muted-foreground">Pre-existing Health Conditions (Optional):</p>
+                    
+                    <div className="flex items-center gap-2.5 mt-1.5">
+                      <input
+                        id="reg-diabetes"
+                        type="checkbox"
+                        checked={hasDiabetes}
+                        onChange={(e) => setHasDiabetes(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                      />
+                      <Label htmlFor="reg-diabetes" className="font-semibold text-xs text-foreground cursor-pointer">I have Diabetes</Label>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        id="reg-high-bp"
+                        type="checkbox"
+                        checked={hasHighBP}
+                        onChange={(e) => setHasHighBP(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                      />
+                      <Label htmlFor="reg-high-bp" className="font-semibold text-xs text-foreground cursor-pointer">I have High Blood Pressure</Label>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        id="reg-low-bp"
+                        type="checkbox"
+                        checked={hasLowBP}
+                        onChange={(e) => setHasLowBP(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                      />
+                      <Label htmlFor="reg-low-bp" className="font-semibold text-xs text-foreground cursor-pointer">I have Low Blood Pressure</Label>
+                    </div>
+                  </div>
+
+                  <Button type="submit" disabled={isLoading} className="w-full rounded-xl py-3 mt-3 shadow-sm font-semibold">
                     {isLoading ? 'Registering...' : 'Create Account'}
                   </Button>
                 </form>

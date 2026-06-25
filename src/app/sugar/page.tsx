@@ -7,16 +7,19 @@ import { SugarForm } from '@/components/sugar-form';
 import { Button } from '@/components/ui/button';
 import { Droplet, Plus, Activity } from 'lucide-react';
 import { db } from '@/lib/db';
-import { SugarReading } from '@/types';
+import { SugarReading, Profile } from '@/types';
 
 export default function SugarPage() {
   const [readings, setReadings] = useState<SugarReading[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingReading, setEditingReading] = useState<SugarReading | null>(null);
 
   const fetchReadings = async () => {
     try {
+      const user = await db.getCurrentUser();
+      setProfile(user);
       const data = await db.getSugarReadings();
       setReadings(data);
     } catch (e) {
@@ -80,6 +83,7 @@ export default function SugarPage() {
           readings={readings} 
           onRefresh={fetchReadings} 
           onEdit={handleEditClick} 
+          profile={profile}
         />
       </div>
 

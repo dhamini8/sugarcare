@@ -5,9 +5,9 @@ import { DashboardShell } from '@/components/dashboard-shell';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Droplet, Activity, LineChart as ChartIcon, Calendar, Info } from 'lucide-react';
+import { Droplet, Activity, LineChart as ChartIcon, Calendar, Info, Scale } from 'lucide-react';
 import { db } from '@/lib/db';
-import { SugarReading, BPReading } from '@/types';
+import { SugarReading, BPReading, WeightReading } from '@/types';
 import {
   LineChart,
   Line,
@@ -24,11 +24,14 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [sugarReadings, setSugarReadings] = useState<SugarReading[]>([]);
   const [bpReadings, setBPReadings] = useState<BPReading[]>([]);
+  const [weightReadings, setWeightReadings] = useState<WeightReading[]>([]);
+  const [displayUnit, setDisplayUnit] = useState<'kg' | 'lbs'>('kg');
   const [hasMounted, setHasMounted] = useState(false);
 
   // Time range filters
   const [sugarRange, setSugarRange] = useState<7 | 30 | 90>(30);
   const [bpRange, setBpRange] = useState<7 | 30 | 90>(30);
+  const [weightRange, setWeightRange] = useState<7 | 30 | 90>(30);
 
   useEffect(() => {
     setHasMounted(true);
@@ -36,8 +39,15 @@ export default function AnalyticsPage() {
       try {
         const sugar = await db.getSugarReadings();
         const bp = await db.getBPReadings();
+        const weight = await db.getWeightReadings();
         setSugarReadings(sugar);
         setBPReadings(bp);
+        setWeightReadings(weight);
+
+        const savedUnit = localStorage.getItem('sugarcare_weight_unit');
+        if (savedUnit === 'kg' || savedUnit === 'lbs') {
+          setDisplayUnit(savedUnit);
+        }
       } catch (e) {
         console.error('Error fetching analytics data', e);
       } finally {
@@ -54,7 +64,6 @@ export default function AnalyticsPage() {
 
     const filtered = sugarReadings
       .filter(r => new Date(r.reading_time) >= cutoff)
-      // Sort ascending for chart chronological order
       .sort((a, b) => new Date(a.reading_time).getTime() - new Date(b.reading_time).getTime());
 
     return filtered.map(r => {
@@ -93,6 +102,30 @@ export default function AnalyticsPage() {
     });
   }, [bpReadings, bpRange]);
 
+  // Filter & format Weight chart data
+  const weightChartData = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - weightRange);
+
+    const filtered = weightReadings
+      .filter(r => new Date(r.reading_time) >= cutoff)
+      .sort((a, b) => new Date(a.reading_time).getTime() - new Date(b.reading_time).getTime());
+
+    return filtered.map(r => {
+      const d = new Date(r.reading_time);
+      const val = displayUnit === 'lbs' 
+        ? Math.round(Number(r.weight_value) * 2.20462 * 10) / 10
+        : Number(r.weight_value);
+      return {
+        id: r.id,
+        rawDate: d,
+        displayDate: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        displayTime: d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+        value: val
+      };
+    });
+  }, [weightReadings, weightRange, displayUnit]);
+
   // Sugar stats summary
   const sugarStats = useMemo(() => {
     if (sugarChartData.length === 0) return null;
@@ -119,6 +152,18 @@ export default function AnalyticsPage() {
     };
   }, [bpChartData]);
 
+  // Weight stats summary
+  const weightStats = useMemo(() => {
+    if (weightChartData.length === 0) return null;
+    const values = weightChartData.map(d => d.value);
+    const sum = values.reduce((a, b) => a + b, 0);
+    return {
+      average: Math.round((sum / values.length) * 10) / 10,
+      max: Math.max(...values),
+      min: Math.min(...values)
+    };
+  }, [weightChartData]);
+
   if (loading) {
     return (
       <DashboardShell>
@@ -141,19 +186,22 @@ export default function AnalyticsPage() {
             </div>
             <div>
               <h2 className="text-xl font-bold tracking-tight text-foreground">Health Analytics</h2>
-              <p className="text-xs text-muted-foreground">Visualize glucose trends and blood pressure curves over time.</p>
+              <p className="text-xs text-muted-foreground">Visualize glucose trends, blood pressure curves, and body weight logs.</p>
             </div>
           </div>
         </div>
 
         {/* TABS CONTAINER */}
         <Tabs defaultValue="sugar" className="space-y-6">
-          <TabsList className="grid w-full max-w-[400px] grid-cols-2 rounded-xl h-11 p-1 bg-muted">
+          <TabsList className="grid w-full max-w-[600px] grid-cols-3 rounded-xl h-11 p-1 bg-muted">
             <TabsTrigger value="sugar" className="rounded-lg font-medium text-xs flex items-center gap-2">
-              <Droplet className="h-4 w-4 text-blue-500" /> Glucose Levels
+              <Droplet className="h-4 w-4 text-blue-500" /> Glucose
             </TabsTrigger>
             <TabsTrigger value="bp" className="rounded-lg font-medium text-xs flex items-center gap-2">
               <Activity className="h-4 w-4 text-emerald-500" /> Blood Pressure
+            </TabsTrigger>
+            <TabsTrigger value="weight" className="rounded-lg font-medium text-xs flex items-center gap-2">
+              <Scale className="h-4 w-4 text-cyan-500" /> Weight
             </TabsTrigger>
           </TabsList>
 
@@ -344,6 +392,100 @@ export default function AnalyticsPage() {
                 ) : (
                   <div className="text-center py-16 text-muted-foreground">
                     <p className="text-sm">No blood pressure entries logged in this time range.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* WEIGHT ANALYTICS TAB */}
+          <TabsContent value="weight" className="space-y-6 outline-none">
+            <Card className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+              <CardHeader className="p-6 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base font-bold">Weight Trend</CardTitle>
+                  <CardDescription className="text-xs">Line representation of body weight records in {displayUnit}.</CardDescription>
+                </div>
+                <div className="flex items-center bg-muted p-1 rounded-xl gap-1 shrink-0">
+                  <Button variant={weightRange === 7 ? 'secondary' : 'ghost'} size="sm" onClick={() => setWeightRange(7)} className="h-8 text-xs rounded-lg px-3">7 Days</Button>
+                  <Button variant={weightRange === 30 ? 'secondary' : 'ghost'} size="sm" onClick={() => setWeightRange(30)} className="h-8 text-xs rounded-lg px-3">30 Days</Button>
+                  <Button variant={weightRange === 90 ? 'secondary' : 'ghost'} size="sm" onClick={() => setWeightRange(90)} className="h-8 text-xs rounded-lg px-3">90 Days</Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {hasMounted && weightChartData.length > 0 ? (
+                  <div className="space-y-6">
+                    {/* STATS SECTION */}
+                    {weightStats && (
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-muted/40 p-4 rounded-xl text-center">
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Average</p>
+                          <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400 mt-1">
+                            {weightStats.average} <span className="text-[10px] font-normal text-muted-foreground">{displayUnit}</span>
+                          </p>
+                        </div>
+                        <div className="bg-muted/40 p-4 rounded-xl text-center">
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Highest</p>
+                          <p className="text-lg font-bold text-destructive mt-1">
+                            {weightStats.max} <span className="text-[10px] font-normal text-muted-foreground">{displayUnit}</span>
+                          </p>
+                        </div>
+                        <div className="bg-muted/40 p-4 rounded-xl text-center">
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Lowest</p>
+                          <p className="text-lg font-bold text-emerald-500 mt-1">
+                            {weightStats.min} <span className="text-[10px] font-normal text-muted-foreground">{displayUnit}</span>
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CHART */}
+                    <div className="h-[350px] w-full pr-4">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={weightChartData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                          <XAxis dataKey="displayDate" tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" />
+                          <YAxis domain={['dataMin - 5', 'dataMax + 5']} tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" />
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-card border border-border p-3 rounded-xl shadow-lg text-xs space-y-1">
+                                    <p className="font-bold">{data.displayDate} @ {data.displayTime}</p>
+                                    <p className="font-semibold text-cyan-500">Weight: {data.value} {displayUnit}</p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            name="Weight"
+                            stroke="#0891b2"
+                            strokeWidth={3}
+                            dot={{ r: 4, fill: '#ffffff' }}
+                            activeDot={{ r: 6 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    <div className="bg-cyan-500/5 border border-cyan-500/10 rounded-xl p-4 flex items-start gap-3">
+                      <Info className="h-5 w-5 text-cyan-500 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-bold text-primary">Interpreting Weight Trends</h4>
+                        <p className="text-[10px] text-muted-foreground leading-relaxed">
+                          Fluctuations in body weight are normal and can be caused by hydration, salt intake, meal times, and exercise patterns. Tracking weight at the same time each day (typically in the morning on an empty stomach) provides the most consistent trend analysis.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-16 text-muted-foreground">
+                    <p className="text-sm">No weight entries logged in this time range.</p>
                   </div>
                 )}
               </CardContent>

@@ -1,21 +1,34 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Droplet, Activity, ListOrdered, Calendar } from 'lucide-react';
-import { SugarReading, BPReading } from '@/types';
+import { Droplet, Activity, ListOrdered, Calendar, Scale } from 'lucide-react';
+import { SugarReading, BPReading, WeightReading } from '@/types';
 
 interface InsightsCardsProps {
   sugarReadings: SugarReading[];
   bpReadings: BPReading[];
+  weightReadings: WeightReading[];
 }
 
-export function InsightsCards({ sugarReadings, bpReadings }: InsightsCardsProps) {
+export function InsightsCards({ sugarReadings, bpReadings, weightReadings = [] }: InsightsCardsProps) {
+  const [displayUnit, setDisplayUnit] = useState<'kg' | 'lbs'>('kg');
+
+  // Load saved unit preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedUnit = localStorage.getItem('sugarcare_weight_unit');
+      if (savedUnit === 'kg' || savedUnit === 'lbs') {
+        setDisplayUnit(savedUnit);
+      }
+    }
+  }, [weightReadings]);
+
   const latestSugar = sugarReadings[0] || null;
   const latestBP = bpReadings[0] || null;
+  const latestWeight = weightReadings[0] || null;
 
-  const totalSugar = sugarReadings.length;
-  const totalBP = bpReadings.length;
+  const totalLogs = sugarReadings.length + bpReadings.length + weightReadings.length;
 
   // Helpers to filter readings by date range
   const filterByDays = (readings: any[], days: number) => {
@@ -55,6 +68,25 @@ export function InsightsCards({ sugarReadings, bpReadings }: InsightsCardsProps)
       }
     : null;
 
+  // Average weight calculations
+  const weight7Days = filterByDays(weightReadings, 7);
+  const weight30Days = filterByDays(weightReadings, 30);
+
+  const avgWeight7 = weight7Days.length > 0
+    ? Math.round((weight7Days.reduce((acc, curr) => acc + Number(curr.weight_value), 0) / weight7Days.length) * 10) / 10
+    : null;
+  const avgWeight30 = weight30Days.length > 0
+    ? Math.round((weight30Days.reduce((acc, curr) => acc + Number(curr.weight_value), 0) / weight30Days.length) * 10) / 10
+    : null;
+
+  const formatWeight = (kgValue: number) => {
+    if (displayUnit === 'lbs') {
+      const lbsValue = Math.round(kgValue * 2.20462 * 10) / 10;
+      return `${lbsValue} lbs`;
+    }
+    return `${kgValue} kg`;
+  };
+
   // Medical status check functions
   const getSugarStatus = (val: number, type: string) => {
     if (val < 70) return { label: 'Low', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' };
@@ -64,7 +96,6 @@ export function InsightsCards({ sugarReadings, bpReadings }: InsightsCardsProps)
       if (val <= 125) return { label: 'Elevated', color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' };
       return { label: 'High', color: 'bg-destructive/10 text-destructive' };
     } else {
-      // Meal checks
       if (val < 140) return { label: 'Normal', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
       if (val < 200) return { label: 'Elevated', color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400' };
       return { label: 'High', color: 'bg-destructive/10 text-destructive' };
@@ -87,6 +118,10 @@ export function InsightsCards({ sugarReadings, bpReadings }: InsightsCardsProps)
 
   const formattedBPTime = latestBP
     ? new Date(latestBP.reading_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+
+  const formattedWeightTime = latestWeight
+    ? new Date(latestWeight.reading_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : '';
 
   return (
@@ -149,43 +184,53 @@ export function InsightsCards({ sugarReadings, bpReadings }: InsightsCardsProps)
           </CardContent>
         </Card>
 
-        {/* Total Sugar Entries */}
+        {/* Latest Weight Reading */}
         <Card className="rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-all duration-200">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sugar Entries</CardTitle>
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Latest Weight</CardTitle>
+            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+              <Scale className="h-4 w-4" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {latestWeight ? (
+              <div className="space-y-1">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold tracking-tight">{formatWeight(latestWeight.weight_value)}</span>
+                </div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                    Tracked
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">{formattedWeightTime}</span>
+                </div>
+              </div>
+            ) : (
+              <span className="text-sm text-muted-foreground font-medium">No records yet</span>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Total Logs */}
+        <Card className="rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-all duration-200">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Health Logs</CardTitle>
             <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
               <ListOrdered className="h-4 w-4" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold tracking-tight">{totalSugar}</span>
-              <span className="text-xs text-muted-foreground">logs</span>
+              <span className="text-2xl font-bold tracking-tight">{totalLogs}</span>
+              <span className="text-xs text-muted-foreground">entries</span>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Total blood sugar logs tracked</p>
-          </CardContent>
-        </Card>
-
-        {/* Total BP Entries */}
-        <Card className="rounded-2xl border border-border bg-card shadow-sm hover:shadow-md transition-all duration-200">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">BP Entries</CardTitle>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
-              <ListOrdered className="h-4 w-4" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold tracking-tight">{totalBP}</span>
-              <span className="text-xs text-muted-foreground">logs</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Total blood pressure logs tracked</p>
+            <p className="text-[10px] text-muted-foreground mt-1">Total health logs tracked</p>
           </CardContent>
         </Card>
       </div>
 
       {/* HEALTH INSIGHTS SECTION */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sugar Averages */}
         <Card className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="bg-gradient-to-r from-blue-500/10 to-transparent p-4 border-b border-border flex items-center gap-2">
@@ -235,8 +280,8 @@ export function InsightsCards({ sugarReadings, bpReadings }: InsightsCardsProps)
               </span>
               {avgBP7 ? (
                 <div>
-                  <span className="text-lg font-bold">{avgBP7.systolic}/{avgBP7.diastolic}</span>
-                  <span className="text-[10px] text-muted-foreground ml-1">{avgBP7.pulse} bpm</span>
+                  <span className="text-base font-bold">{avgBP7.systolic}/{avgBP7.diastolic}</span>
+                  <span className="text-[10px] text-muted-foreground block">{avgBP7.pulse} bpm</span>
                 </div>
               ) : (
                 <span className="text-xs text-muted-foreground font-medium">Insufficient data</span>
@@ -248,8 +293,42 @@ export function InsightsCards({ sugarReadings, bpReadings }: InsightsCardsProps)
               </span>
               {avgBP30 ? (
                 <div>
-                  <span className="text-lg font-bold">{avgBP30.systolic}/{avgBP30.diastolic}</span>
-                  <span className="text-[10px] text-muted-foreground ml-1">{avgBP30.pulse} bpm</span>
+                  <span className="text-base font-bold">{avgBP30.systolic}/{avgBP30.diastolic}</span>
+                  <span className="text-[10px] text-muted-foreground block">{avgBP30.pulse} bpm</span>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground font-medium">Insufficient data</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Weight Averages */}
+        <Card className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="bg-gradient-to-r from-cyan-500/10 to-transparent p-4 border-b border-border flex items-center gap-2">
+            <Scale className="h-5 w-5 text-cyan-500" />
+            <h3 className="font-bold text-sm text-primary">Weight Insights</h3>
+          </div>
+          <CardContent className="p-6 grid grid-cols-2 gap-4">
+            <div className="bg-muted/50 p-4 rounded-xl flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" /> 7-Day Average
+              </span>
+              {avgWeight7 ? (
+                <div>
+                  <span className="text-lg font-bold">{formatWeight(avgWeight7)}</span>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground font-medium">Insufficient data</span>
+              )}
+            </div>
+            <div className="bg-muted/50 p-4 rounded-xl flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" /> 30-Day Average
+              </span>
+              {avgWeight30 ? (
+                <div>
+                  <span className="text-lg font-bold">{formatWeight(avgWeight30)}</span>
                 </div>
               ) : (
                 <span className="text-xs text-muted-foreground font-medium">Insufficient data</span>
